@@ -1,5 +1,6 @@
 package ru.gang.newsBot.bot;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.DefaultBotOptions;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -12,7 +13,9 @@ import ru.gang.newsBot.service.NewsAnalyzerService;
 import ru.gang.newsBot.service.NewsPosterService;
 import ru.gang.newsBot.service.RssParserService;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Component
 public class NewsBot extends TelegramLongPollingBot {
@@ -20,6 +23,8 @@ public class NewsBot extends TelegramLongPollingBot {
     private final RssParserService rssParserService;
     private final NewsAnalyzerService newsAnalyzerService;
     private final NewsPosterService newsPosterService;
+
+    private final Set<String> sentNews = new HashSet<>();
 
     public NewsBot(DefaultBotOptions options,
                    RssParserService rssParserService,
@@ -29,16 +34,17 @@ public class NewsBot extends TelegramLongPollingBot {
         this.rssParserService = rssParserService;
         this.newsAnalyzerService = newsAnalyzerService;
         this.newsPosterService = newsPosterService;
-
         System.out.println("✅ Бот успешно запущен и подключен к Telegram API");
     }
 
+    @Value("${telegram.bot.username}")
     @Override
     public String getBotUsername() {
         // Укажите имя вашего бота
         return "News_parser_all_bot";
     }
 
+    @Value("${telegram.bot.token}")
     @Override
     public String getBotToken() {
         // Укажите ваш реальный API-токен
@@ -63,9 +69,6 @@ public class NewsBot extends TelegramLongPollingBot {
         }
     }
 
-    /**
-     * Вспомогательный метод для отправки обычного текстового сообщения.
-     */
     private void sendTextMessage(Long chatId, String text) {
         try {
             SendMessage message = new SendMessage(chatId.toString(), text);
@@ -75,37 +78,47 @@ public class NewsBot extends TelegramLongPollingBot {
         }
     }
 
-    /**
-     * Метод, который загружает новости и отправляет в канал/чат.
-     * Его можно вызывать вручную или по расписанию (через ScheduledNewsFetcher).
-     */
     public void fetchAndPostNews() {
         System.out.println("🔄 Запущено обновление новостей...");
-        List<NewsItem> newsList = rssParserService.fetchNewsWithImages();
-        System.out.println("📰 Загружено " + newsList.size() + " новостей с фото");
+        List<NewsItem> newsList = rssParserService.fetchNewsWithCategory();
 
-        if (!newsList.isEmpty()) {
-            NewsItem news = newsList.get(0);
+        System.out.println("📌 Финальный список отправки новостей:");
+        for (NewsItem item : newsList) {  // Изменяем имя переменной в цикле
+            System.out.println("📜 " + item.getTitle() + " | Категория: " + item.getCategory());
+        }
+
+        for (NewsItem news : newsList) {
+            if (sentNews.contains(news.getUrl())) {
+                System.out.println("⏭ Пропуск: уже отправлена - " + news.getTitle());
+                continue;
+            }
+
             System.out.println("✍ Отправка новости: " + news.getTitle());
 
-            // Пусть NewsPosterService сформирует сообщение с фото
+            // Получаем канал для категории через RssParserService
+            String channelId = rssParserService.getCategoryChannel(news.getCategory());
+            if (channelId == null) {
+                System.out.println("⚠ Не найден канал для категории: " + news.getCategory());
+                continue;
+            }
+
+            System.out.println("📤 Готовим отправку в канал " + channelId + " для категории " + news.getCategory());
             SendPhoto photoMessage = newsPosterService.buildPhotoMessage(
                     news.getTitle(),
                     news.getUrl(),
-                    news.getSource(),
                     news.getImageUrl(),
-                    news.getDescription()
+                    news.getDescription(),
+                    channelId
             );
 
-            // А сам бот выполнит отправку
             try {
                 execute(photoMessage);
-                System.out.println("✅ Новость с фото отправлена!");
+                sentNews.add(news.getUrl()); // Запоминаем отправленную новость
+                System.out.println("✅ Новость отправлена в канал: " + channelId);
             } catch (TelegramApiException e) {
                 System.err.println("❌ Ошибка при отправке фото: " + e.getMessage());
             }
-        } else {
-            System.out.println("⚠ Нет новостей с изображениями!");
         }
     }
+
 }

@@ -6,22 +6,23 @@ import org.telegram.telegrambots.meta.api.objects.InputFile;
 
 @Service
 public class NewsPosterService {
-    private static final String CHANNEL_ID = "-1002420518377";
 
-    public SendPhoto buildPhotoMessage(String newsTitle,
-                                       String newsUrl,
-                                       String newsSource,
-                                       String imageUrl,
-                                       String description) {
-        String formattedMessage = "📢 *Главная новость дня* 📢\n\n"
-                + (newsTitle != null && !newsTitle.isBlank() ? newsTitle + "\n\n" : "")
-                + (description != null && !description.isBlank() ? description + "\n\n" : "")
-                + "🏛 *Источник:* " + newsSource;
+    private static final String CHANNEL_ID = "-1002420518377";
+    private static final int MAX_CAPTION_LENGTH = 1024; // лимит Telegram для подписи
+
+    public SendPhoto buildPhotoMessage(String title, String url, String imageUrl, String description, String channelId) {
         SendPhoto photoMessage = new SendPhoto();
-        photoMessage.setChatId(CHANNEL_ID);
+        photoMessage.setChatId(channelId);
         photoMessage.setPhoto(new InputFile(imageUrl));
-        photoMessage.setCaption(formattedMessage);
-        photoMessage.setParseMode("Markdown");
+
+        String caption = title + "\n\n" + description;
+        if (caption.length() > 900) {
+            caption = caption.substring(0, 900) + "... Читать полностью: " + url;
+        }
+
+        photoMessage.setCaption(caption);
         return photoMessage;
     }
+
+
 }

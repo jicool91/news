@@ -1,14 +1,10 @@
-package ru.gang.newsBot.service;
+package ru.gang.newsBot.scheduler;
 
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import ru.gang.newsBot.bot.NewsBot;
 
-/**
- * Отдельный сервис, который вызывает метод обновления новостей
- * по расписанию, чтобы не проксировать сам бот.
- */
-@Service
+@Component
 public class ScheduledNewsFetcher {
 
     private final NewsBot newsBot;
@@ -17,11 +13,8 @@ public class ScheduledNewsFetcher {
         this.newsBot = newsBot;
     }
 
-    /**
-     * Раз в 10 минут вызываем fetchAndPostNews() у бота.
-     */
-    @Scheduled(fixedRate = 600000)
-    public void fetchNews() {
+    @Scheduled(fixedRateString = "${news.fetch.interval}")
+    public void fetchNewsPeriodically() {
         newsBot.fetchAndPostNews();
     }
 }
