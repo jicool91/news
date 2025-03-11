@@ -13,6 +13,7 @@ import ru.gang.newsBot.service.NewsAnalyzerService;
 import ru.gang.newsBot.service.NewsPosterService;
 import ru.gang.newsBot.service.RssParserService;
 
+import java.io.*;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -80,22 +81,31 @@ public class NewsBot extends TelegramLongPollingBot {
 
     public void fetchAndPostNews() {
         System.out.println("🔄 Запущено обновление новостей...");
+
+        // Загружаем уже отправленные новости из файла
+        loadSentNews();
+
         List<NewsItem> newsList = rssParserService.fetchNewsWithCategory();
+        Set<String> sentCategories = new HashSet<>(); // Для отслеживания уже отправленных категорий
 
         System.out.println("📌 Финальный список отправки новостей:");
-        for (NewsItem item : newsList) {  // Изменяем имя переменной в цикле
-            System.out.println("📜 " + item.getTitle() + " | Категория: " + item.getCategory());
+        for (NewsItem news : newsList) {
+            System.out.println("📜 " + news.getTitle() + " | Категория: " + news.getCategory());
         }
 
         for (NewsItem news : newsList) {
             if (sentNews.contains(news.getUrl())) {
-                System.out.println("⏭ Пропуск: уже отправлена - " + news.getTitle());
+                System.out.println("⏭ Пропуск: уже отправляли - " + news.getTitle());
+                continue;
+            }
+
+            if (sentCategories.contains(news.getCategory())) {
+                System.out.println("⏭ Пропуск: уже отправлена новость из категории - " + news.getCategory());
                 continue;
             }
 
             System.out.println("✍ Отправка новости: " + news.getTitle());
 
-            // Получаем канал для категории через RssParserService
             String channelId = rssParserService.getCategoryChannel(news.getCategory());
             if (channelId == null) {
                 System.out.println("⚠ Не найден канал для категории: " + news.getCategory());
@@ -113,12 +123,42 @@ public class NewsBot extends TelegramLongPollingBot {
 
             try {
                 execute(photoMessage);
-                sentNews.add(news.getUrl()); // Запоминаем отправленную новость
+                sentNews.add(news.getUrl()); // Добавляем новость в список отправленных
+                sentCategories.add(news.getCategory()); // Запоминаем, что отправлена новость этой категории
+                saveSentNews(); // Сохраняем в файл
                 System.out.println("✅ Новость отправлена в канал: " + channelId);
             } catch (TelegramApiException e) {
                 System.err.println("❌ Ошибка при отправке фото: " + e.getMessage());
             }
         }
     }
+
+    private static final String SENT_NEWS_FILE = "sent_news.txt";
+
+    // Загружаем отправленные новости из файла
+    private void loadSentNews() {
+        try (BufferedReader reader = new BufferedReader(new FileReader(SENT_NEWS_FILE))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sentNews.add(line.trim());
+            }
+        } catch (IOException e) {
+            System.out.println("⚠ Файл отправленных новостей не найден. Создаём новый.");
+        }
+    }
+
+    // Сохраняем отправленные новости в файл
+    private void saveSentNews() {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SENT_NEWS_FILE))) {
+            for (String newsUrl : sentNews) {
+                writer.write(newsUrl);
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            System.err.println("❌ Ошибка при сохранении отправленных новостей: " + e.getMessage());
+        }
+    }
+
+
 
 }
