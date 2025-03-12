@@ -18,6 +18,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -33,6 +35,11 @@ public class RssParserService {
             "Мир", "world",
             "Экономика", "economy"
     );
+
+    private static final int MAX_IMAGE_RETRY_ATTEMPTS = 5;
+    private static final int IMAGE_RETRY_DELAY_MS = 5000; // 5 секунд между попытками
+    private static final Pattern DEFAULT_IMAGE_PATTERN = Pattern.compile(".*/assets/webpack/images/lenta_og\\.[a-f0-9]+\\.png$");
+    private static final Pattern VALID_IMAGE_PATTERN = Pattern.compile(".*/images/\\d+/\\d+/\\d+/\\d+/.*\\.jpg$");
 
     public String getCategoryChannel(String category) {
         return newsChannelConfig.getChannelByEnglishCategory(category);
@@ -138,21 +145,61 @@ public class RssParserService {
     private CompletableFuture<String> extractImageFromArticleAsync(String articleUrl) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                RequestConfig config = new RequestConfig(
-                        rssConfig.getMaxRetries(),
-                        rssConfig.getTimeout(),
-                        rssConfig.getMaxTimeout());
-
-                Document articleDoc = HttpRequestUtil.fetchWithRetry(articleUrl, config);
-                Element metaOgImage = articleDoc.selectFirst("meta[property=og:image]");
-                String imageUrl = metaOgImage != null ? metaOgImage.attr("content") : "";
-                log.debug("Извлечена картинка для {}: {}", articleUrl, imageUrl);
-                return imageUrl;
+                return extractImageWithRetries(articleUrl, 0);
             } catch (Exception e) {
                 log.error("Ошибка при извлечении изображения из статьи {}", articleUrl, e);
                 return "";
             }
         });
+    }
+
+    private String extractImageWithRetries(String articleUrl, int attemptCount) throws Exception {
+        if (attemptCount >= MAX_IMAGE_RETRY_ATTEMPTS) {
+            log.warn("Достигнуто максимальное количество попыток получения изображения для {}", articleUrl);
+            return "";
+        }
+
+        RequestConfig config = new RequestConfig(
+                rssConfig.getMaxRetries(),
+                rssConfig.getTimeout(),
+                rssConfig.getMaxTimeout());
+
+        Document articleDoc = HttpRequestUtil.fetchWithRetry(articleUrl, config);
+        Element metaOgImage = articleDoc.selectFirst("meta[property=og:image]");
+
+        if (metaOgImage == null) {
+            log.debug("Мета-тег с изображением не найден для {}", articleUrl);
+            return "";
+        }
+
+        String imageUrl = metaOgImage.attr("content");
+
+        // Проверяем, является ли изображение стандартным (lenta_og.png)
+        if (imageUrl != null && !imageUrl.isEmpty()) {
+            if (DEFAULT_IMAGE_PATTERN.matcher(imageUrl).matches()) {
+                log.debug("Обнаружено стандартное изображение для {}, попытка: {}", articleUrl, attemptCount + 1);
+
+                // Если используется стандартное изображение, ждем и пробуем снова
+                TimeUnit.MILLISECONDS.sleep(IMAGE_RETRY_DELAY_MS);
+                return extractImageWithRetries(articleUrl, attemptCount + 1);
+            } else if (VALID_IMAGE_PATTERN.matcher(imageUrl).matches()) {
+                log.debug("Найдено валидное изображение для {} на попытке {}: {}", articleUrl, attemptCount + 1, imageUrl);
+                return imageUrl;
+            } else {
+                log.debug("Найдено изображение для {}, но оно не соответствует ожидаемому формату: {}", articleUrl, imageUrl);
+
+                // Если формат URL не соответствует ожидаемому, но это не стандартное изображение,
+                // проверяем еще раз через некоторое время
+                if (attemptCount < 2) {  // Даем еще пару попыток
+                    TimeUnit.MILLISECONDS.sleep(IMAGE_RETRY_DELAY_MS);
+                    return extractImageWithRetries(articleUrl, attemptCount + 1);
+                }
+                return imageUrl;  // Возвращаем то, что есть
+            }
+        }
+
+        log.debug("Изображение не найдено для {}", articleUrl);
+        return "";
     }
 
     private Map<String, NewsItem> parseRssToLatestByCategory(String rssUrl, Set<String> targetCategories) throws Exception {
@@ -196,6 +243,12 @@ public class RssParserService {
             log.debug("Обнаружена новость для категории {}: {}", normalizedCategory, title);
 
             String imageUrlFromRss = item.select("enclosure[url]").attr("url");
+
+            // Проверяем, является ли изображение из RSS стандартным
+            if (!imageUrlFromRss.isEmpty() && DEFAULT_IMAGE_PATTERN.matcher(imageUrlFromRss).matches()) {
+                log.debug("Стандартное изображение в RSS, будем загружать из статьи: {}", imageUrlFromRss);
+                imageUrlFromRss = ""; // Сбрасываем, чтобы загрузить из статьи
+            }
 
             // Создаем базовый объект с информацией, которая уже доступна
             NewsItemBasic basicNewsItem = NewsItemBasic.builder()
