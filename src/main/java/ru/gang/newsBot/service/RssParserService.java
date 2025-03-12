@@ -13,6 +13,7 @@ import ru.gang.newsBot.util.HttpRequestUtil;
 import ru.gang.newsBot.util.HttpRequestUtil.RequestConfig;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -36,72 +37,113 @@ public class RssParserService {
             "https://lenta.ru/rss/news"
     );
 
-    private final int maxItems = 5;
+    public Map<String, NewsItem> fetchLatestNewsByCategory() {
+        Map<String, NewsItem> categoryNewsMap = new HashMap<>();
+        Set<String> targetCategories = new HashSet<>(categoryTranslation.values());
 
-    public List<NewsItem> fetchNewsWithCategory() {
-        List<NewsItem> newsList = new ArrayList<>();
         for (String rssUrl : rssUrls) {
             log.info("Загружаем RSS: {}", rssUrl);
             try {
-                List<NewsItem> parsedNews = parseRss(rssUrl);
-                newsList.addAll(parsedNews);
-                log.info("Загружено {} новостей с {}", parsedNews.size(), rssUrl);
+                Map<String, NewsItem> newsFromSource = parseRssToLatestByCategory(rssUrl, targetCategories);
+
+                // Добавляем или заменяем новости по каждой категории
+                for (Map.Entry<String, NewsItem> entry : newsFromSource.entrySet()) {
+                    categoryNewsMap.put(entry.getKey(), entry.getValue());
+                }
+
+                log.info("Загружено по {} новостей из категорий: {}", newsFromSource.size(),
+                        String.join(", ", newsFromSource.keySet()));
             } catch (Exception e) {
                 log.error("Ошибка при обработке RSS {}: {}", rssUrl, e.getMessage(), e);
             }
         }
-        return newsList;
+
+        return categoryNewsMap;
     }
 
     private String extractFullDescription(String articleUrl) {
         try {
             RequestConfig config = new RequestConfig(
-                    rssConfig.getMaxRetries(), 
-                    rssConfig.getTimeout(), 
+                    rssConfig.getMaxRetries(),
+                    rssConfig.getTimeout(),
                     rssConfig.getMaxTimeout());
-            
+
             Document articleDoc = HttpRequestUtil.fetchWithRetry(articleUrl, config);
-            Element descriptionElement = articleDoc.selectFirst("meta[name=description]");
-            String description = descriptionElement != null ? descriptionElement.attr("content") : "";
-            log.debug("Извлечено полное описание ({}): {}", articleUrl, description);
-            return description;
+
+            String fullText = "";
+
+            if (articleUrl.contains("lenta.ru")) {
+                Elements paragraphs = articleDoc.select(".topic-body__content p");
+                fullText = paragraphs.stream()
+                        .map(Element::text)
+                        .filter(text -> !text.isEmpty())
+                        .collect(Collectors.joining("\n\n"));
+            }
+
+            if (fullText.isEmpty()) {
+                Elements paragraphs = articleDoc.select("article p, .article p, .news-text p, .entry-content p, .post-content p, .content p");
+                fullText = paragraphs.stream()
+                        .map(Element::text)
+                        .filter(text -> !text.isEmpty())
+                        .collect(Collectors.joining("\n\n"));
+            }
+
+            if (fullText.isEmpty()) {
+                Element descriptionElement = articleDoc.selectFirst("meta[name=description]");
+                fullText = descriptionElement != null ? descriptionElement.attr("content") : "";
+            }
+
+            log.debug("Извлечено полное описание ({}): {} символов", articleUrl, fullText.length());
+            return fullText;
         } catch (Exception e) {
             log.error("Ошибка при извлечении полного описания: {}", e.getMessage(), e);
             return "";
         }
     }
 
-    private List<NewsItem> parseRss(String rssUrl) throws Exception {
-        List<NewsItem> newsList = new ArrayList<>();
+    private Map<String, NewsItem> parseRssToLatestByCategory(String rssUrl, Set<String> targetCategories) throws Exception {
+        Map<String, NewsItem> categoryNewsMap = new HashMap<>();
+        Map<String, Integer> processingOrder = new HashMap<>();
+        int order = 0;
 
         RequestConfig config = new RequestConfig(
-                rssConfig.getMaxRetries(), 
-                rssConfig.getTimeout(), 
+                rssConfig.getMaxRetries(),
+                rssConfig.getTimeout(),
                 rssConfig.getMaxTimeout());
-        
+
         Document rssDoc = HttpRequestUtil.fetchWithRetry(rssUrl, config);
         Elements items = rssDoc.select("item");
         log.debug("Найдено элементов <item>: {}", items.size());
 
-        int count = 0;
+        // Перебираем все новости в поисках последних новостей по каждой категории
         for (Element item : items) {
-            if (count >= maxItems) break;
-
             String title = item.select("title").text();
-            String link = item.select("link").text();
-            String description = item.select("description").text().trim();
             String category = item.select("category").text().trim();
 
-            log.debug("Обнаружена новость: {}", title);
-            log.debug("Категория (оригинал): {}", category);
-
             String normalizedCategory = categoryTranslation.getOrDefault(category, category).toLowerCase();
-            log.debug("Категория переведена: {} -> {}", category, normalizedCategory);
 
-            if (!newsChannelConfig.getChannels().containsKey(normalizedCategory)) {
+            // Проверяем, является ли эта категория целевой
+            if (!targetCategories.contains(normalizedCategory)) {
                 log.debug("Пропускаем категорию: {} (нет в списке)", category);
                 continue;
             }
+
+            // Если мы уже нашли новость для этой категории и она была раньше в RSS (больший порядок),
+            // пропускаем эту новость, так как она старее
+            if (processingOrder.containsKey(normalizedCategory) &&
+                    processingOrder.get(normalizedCategory) < order) {
+                order++;
+                continue;
+            }
+
+            // Сохраняем порядок для этой категории
+            processingOrder.put(normalizedCategory, order);
+            order++;
+
+            String link = item.select("link").text();
+            String description = item.select("description").text().trim();
+
+            log.debug("Обнаружена новость для категории {}: {}", normalizedCategory, title);
 
             String imageUrl = item.select("enclosure[url]").attr("url");
             if (imageUrl.isEmpty()) {
@@ -110,23 +152,31 @@ public class RssParserService {
 
             String source = getSourceName(rssUrl);
 
-            if (description.isEmpty()) {
+            if (description.isEmpty() || description.length() < 100) {
                 description = extractFullDescription(link);
             }
 
-            newsList.add(NewsItem.builder()
+            NewsItem newsItem = NewsItem.builder()
                     .title(title)
                     .url(link)
                     .source(source)
                     .imageUrl(imageUrl)
                     .description(description)
                     .category(normalizedCategory)
-                    .build());
-            count++;
+                    .build();
+
+            categoryNewsMap.put(normalizedCategory, newsItem);
+
+            // Если у нас есть новости для всех целевых категорий, можно выходить из цикла
+            if (categoryNewsMap.keySet().containsAll(targetCategories)) {
+                log.info("Найдены новости для всех целевых категорий");
+                break;
+            }
         }
-        
-        log.info("Успешно обработано {} новостей из источника {}", newsList.size(), rssUrl);
-        return newsList;
+
+        log.info("Успешно обработаны новости для {} категорий из {}",
+                categoryNewsMap.size(), targetCategories.size());
+        return categoryNewsMap;
     }
 
     private String getSourceName(String rssUrl) {
@@ -137,10 +187,10 @@ public class RssParserService {
     private String extractImageFromArticle(String articleUrl) {
         try {
             RequestConfig config = new RequestConfig(
-                    rssConfig.getMaxRetries(), 
-                    rssConfig.getTimeout(), 
+                    rssConfig.getMaxRetries(),
+                    rssConfig.getTimeout(),
                     rssConfig.getMaxTimeout());
-            
+
             Document articleDoc = HttpRequestUtil.fetchWithRetry(articleUrl, config);
             Element metaOgImage = articleDoc.selectFirst("meta[property=og:image]");
             String imageUrl = metaOgImage != null ? metaOgImage.attr("content") : "";

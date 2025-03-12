@@ -9,7 +9,6 @@ import org.telegram.telegrambots.bots.DefaultBotOptions;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
-import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import ru.gang.newsBot.model.NewsItem;
@@ -19,8 +18,9 @@ import ru.gang.newsBot.service.RssParserService;
 
 import java.io.*;
 import java.util.HashSet;
-import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 public class NewsBot extends TelegramLongPollingBot {
@@ -94,72 +94,58 @@ public class NewsBot extends TelegramLongPollingBot {
 
         loadSentNews();
 
-        List<NewsItem> newsList = rssParserService.fetchNewsWithCategory();
-        Set<String> sentCategories = new HashSet<>();
+        // Получаем последние новости по каждой категории
+        Map<String, NewsItem> categoryNewsMap = rssParserService.fetchLatestNewsByCategory();
 
-        log.info("Финальный список отправки новостей: {} элементов", newsList.size());
-        for (NewsItem news : newsList) {
-            log.debug("Новость: {} | Категория: {}", news.getTitle(), news.getCategory());
-        }
+        log.info("Финальный список отправки новостей: {} категорий", categoryNewsMap.size());
+        categoryNewsMap.forEach((category, news) ->
+                log.debug("Новость: {} | Категория: {}", news.getTitle(), news.getCategory()));
 
-        for (NewsItem news : newsList) {
-            if (sentNews.contains(news.getUrl())) {
-                log.debug("Пропуск: уже отправляли - {}", news.getTitle());
-                continue;
-            }
+        // Отправляем каждую новость асинхронно
+        categoryNewsMap.forEach((category, news) -> {
+            CompletableFuture.runAsync(() -> {
+                if (sentNews.contains(news.getUrl())) {
+                    log.debug("Пропуск: уже отправляли - {}", news.getTitle());
+                    return;
+                }
 
-            if (sentCategories.contains(news.getCategory())) {
-                log.debug("Пропуск: уже отправлена новость из категории - {}", news.getCategory());
-                continue;
-            }
+                log.info("Отправка новости: {}", news.getTitle());
 
-            log.info("Отправка новости: {}", news.getTitle());
+                String channelId = rssParserService.getCategoryChannel(news.getCategory());
+                if (channelId == null) {
+                    log.warn("Не найден канал для категории: {}", news.getCategory());
+                    return;
+                }
 
-            String channelId = rssParserService.getCategoryChannel(news.getCategory());
-            if (channelId == null) {
-                log.warn("Не найден канал для категории: {}", news.getCategory());
-                continue;
-            }
+                log.debug("Готовим отправку в канал {} для категории {}", channelId, news.getCategory());
 
-            log.debug("Готовим отправку в канал {} для категории {}", channelId, news.getCategory());
+                // Проверяем описание новости
+                String description = news.getDescription().trim();
+                if (description.isEmpty()) {
+                    log.debug("Описание отсутствует, подставляем заглушку.");
+                    description = "Описание недоступно. Подробнее по ссылке ниже.";
+                }
 
-            // Проверяем описание новости
-            String description = news.getDescription().trim();
-            if (description.isEmpty()) {
-                log.debug("Описание отсутствует, подставляем заглушку.");
-                description = "Описание недоступно. Подробнее по ссылке ниже.";
-            }
+                // Создаем сообщение с фото
+                SendPhoto photoMessage = newsPosterService.buildPhotoMessage(
+                        news.getTitle(),
+                        news.getUrl(),
+                        news.getSource(),
+                        news.getImageUrl(),
+                        news.getDescription(),
+                        channelId
+                );
 
-            // Формируем текст сообщения
-            String caption = "**" + news.getTitle() + "**\n\n" + description;
-
-            // Учитываем лимит в 1024 символа
-            if (caption.length() > 950) {
-                caption = caption.substring(0, 950) + "...";
-            }
-
-            caption += "\n\n[Читать полностью](" + news.getUrl() + ")";
-
-            // Создаем сообщение с фото
-            SendPhoto photoMessage = newsPosterService.buildPhotoMessage(
-                    news.getTitle(),
-                    news.getUrl(),
-                    news.getSource(),
-                    news.getImageUrl(),
-                    news.getDescription(),
-                    channelId
-            );
-
-            try {
-                execute(photoMessage);
-                sentNews.add(news.getUrl());
-                sentCategories.add(news.getCategory());
-                saveSentNews();
-                log.info("Новость успешно отправлена в канал: {}", channelId);
-            } catch (TelegramApiException e) {
-                log.error("Ошибка при отправке фото: {}", e.getMessage(), e);
-            }
-        }
+                try {
+                    execute(photoMessage);
+                    sentNews.add(news.getUrl());
+                    saveSentNews();
+                    log.info("Новость успешно отправлена в канал: {}", channelId);
+                } catch (TelegramApiException e) {
+                    log.error("Ошибка при отправке фото: {}", e.getMessage(), e);
+                }
+            });
+        });
     }
 
     private void loadSentNews() {
