@@ -56,6 +56,21 @@ public class RssParserService {
         return newsList;
     }
 
+    private String extractFullDescription(String articleUrl) {
+        try {
+            Document articleDoc = Jsoup.connect(articleUrl)
+                    .userAgent("Mozilla/5.0")
+                    .timeout(10000)
+                    .get();
+            Element descriptionElement = articleDoc.selectFirst("meta[name=description]");
+            return descriptionElement != null ? descriptionElement.attr("content") : "";
+        } catch (Exception e) {
+            System.err.println("❌ Ошибка при извлечении полного описания: " + e.getMessage());
+            return "";
+        }
+    }
+
+
     private List<NewsItem> parseRss(String rssUrl) throws Exception {
         List<NewsItem> newsList = new ArrayList<>();
 
@@ -65,11 +80,7 @@ public class RssParserService {
                 .timeout(10000);
 
         Document rssDoc = connection.get();
-
-        System.out.println("🔍 Содержимое RSS: \n" + rssDoc);
-
         Elements items = rssDoc.select("item");
-        System.out.println("🔍 Найдено элементов <item>: " + items.size());
 
         int count = 0;
         for (Element item : items) {
@@ -80,18 +91,8 @@ public class RssParserService {
             String description = item.select("description").text().trim();
             String category = item.select("category").text().trim();
 
-            System.out.println("📌 Обнаружена новость: " + title);
-            System.out.println("🏷 Категория (оригинал): " + category);
-
             String normalizedCategory = categoryTranslation.getOrDefault(category, category).toLowerCase();
-            System.out.println("✅ Категория переведена: " + category + " -> " + normalizedCategory);
-
-            System.out.println("📌 Доступные категории: " + categoryToChannel.keySet());
-
-            if (!categoryToChannel.containsKey(normalizedCategory)) {
-                System.out.println("⏭ Пропускаем категорию: " + category + " (нет в списке)");
-                continue;
-            }
+            if (!categoryToChannel.containsKey(normalizedCategory)) continue;
 
             String imageUrl = item.select("enclosure[url]").attr("url");
             if (imageUrl.isEmpty()) {
@@ -99,6 +100,11 @@ public class RssParserService {
             }
 
             String source = getSourceName(rssUrl);
+
+            // Если описание пустое, загружаем его со страницы новости
+            if (description.isEmpty()) {
+                description = extractFullDescription(link);
+            }
 
             newsList.add(NewsItem.builder()
                     .title(title)
@@ -112,6 +118,7 @@ public class RssParserService {
         }
         return newsList;
     }
+
 
     private String getSourceName(String rssUrl) {
         if (rssUrl.contains("lenta.ru")) return "Lenta.ru";

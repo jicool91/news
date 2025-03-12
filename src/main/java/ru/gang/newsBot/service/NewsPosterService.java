@@ -1,28 +1,32 @@
 package ru.gang.newsBot.service;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 
 @Service
-@RequiredArgsConstructor
 public class NewsPosterService {
 
-    private static final String CHANNEL_ID = "-1002420518377";
-    private static final int MAX_CAPTION_LENGTH = 1024;
+    private static final int MAX_CAPTION_LENGTH = 1024; // Лимит Telegram для подписи
 
-    public SendPhoto buildPhotoMessage(String title, String url, String imageUrl, String description, String channelId) {
-        SendPhoto photoMessage = new SendPhoto();
-        photoMessage.setChatId(channelId);
-        photoMessage.setPhoto(new InputFile(imageUrl));
+    public SendPhoto buildPhotoMessage(String newsTitle, String newsUrl, String newsSource, String imageUrl, String description, String channelId) {
+        String formattedMessage = "📢 *Главная новость дня* 📢\n\n"
+                + (newsTitle != null && !newsTitle.isBlank() ? "*" + newsTitle + "*\n\n" : "")
+                + (description != null && !description.isBlank() ? description + "\n\n" : "")
+                + "🔗 [Читать полностью](" + newsUrl + ")";
 
-        String caption = title + "\n\n" + description;
-        if (caption.length() > 900) {
-            caption = caption.substring(0, 900) + "... Читать полностью: " + url;
+        if (formattedMessage.length() > 1024) {
+            formattedMessage = formattedMessage.substring(0, 1021) + "...";
         }
 
-        photoMessage.setCaption(caption);
+        SendPhoto photoMessage = new SendPhoto();
+        photoMessage.setChatId(channelId); // <-- Передаем ID канала
+        photoMessage.setPhoto(new InputFile(imageUrl));
+        photoMessage.setCaption(formattedMessage);
+        photoMessage.setParseMode("Markdown");
+
         return photoMessage;
     }
+
+
 }

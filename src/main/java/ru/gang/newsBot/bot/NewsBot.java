@@ -7,6 +7,7 @@ import org.telegram.telegrambots.bots.DefaultBotOptions;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import ru.gang.newsBot.model.NewsItem;
@@ -118,12 +119,35 @@ public class NewsBot extends TelegramLongPollingBot {
             }
 
             System.out.println("📤 Готовим отправку в канал " + channelId + " для категории " + news.getCategory());
+
+            // Проверяем описание новости
+            String description = news.getDescription().trim();
+            if (description.isEmpty()) {
+                System.out.println("⚠ Описание отсутствует, подставляем заглушку.");
+                description = "Описание недоступно. Подробнее по ссылке ниже.";
+            }
+
+            // Логируем описание
+            System.out.println("📝 Описание новости: " + description);
+
+            // Формируем текст сообщения
+            String caption = "**" + news.getTitle() + "**\n\n" + description;
+
+            // Учитываем лимит в 1024 символа
+            if (caption.length() > 950) {
+                caption = caption.substring(0, 950) + "...";
+            }
+
+            caption += "\n\n[Читать полностью](" + news.getUrl() + ")";
+
+            // Создаем сообщение с фото
             SendPhoto photoMessage = newsPosterService.buildPhotoMessage(
                     news.getTitle(),
                     news.getUrl(),
+                    news.getSource(),
                     news.getImageUrl(),
                     news.getDescription(),
-                    channelId
+                    channelId // <-- Передаем ID канала сюда
             );
 
             try {
@@ -137,6 +161,8 @@ public class NewsBot extends TelegramLongPollingBot {
             }
         }
     }
+
+
 
     private void loadSentNews() {
         try (BufferedReader reader = new BufferedReader(new FileReader(SENT_NEWS_FILE))) {
