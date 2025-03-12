@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import ru.gang.newsBot.config.NewsChannelConfig;
 import ru.gang.newsBot.config.RssConfig;
 import ru.gang.newsBot.model.NewsItem;
+import ru.gang.newsBot.util.AsyncUtils;
 import ru.gang.newsBot.util.HttpRequestUtil;
 import ru.gang.newsBot.util.HttpRequestUtil.RequestConfig;
 
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 public class RssParserService {
     private final NewsChannelConfig newsChannelConfig;
     private final RssConfig rssConfig;
+    private final AsyncUtils asyncUtils;
 
     private static final Map<String, String> categoryTranslation = Map.of(
             "Бывший СССР", "former_ussr",
@@ -68,7 +70,7 @@ public class RssParserService {
         for (String rssUrl : rssUrls) {
             log.info("Асинхронно загружаем RSS: {}", rssUrl);
 
-            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+            CompletableFuture<Void> future = asyncUtils.asyncIoRun(() -> {
                 try {
                     Map<String, NewsItem> newsFromSource = parseRssToLatestByCategory(rssUrl, targetCategories);
 
@@ -101,7 +103,7 @@ public class RssParserService {
     }
 
     private CompletableFuture<String> extractFullDescriptionAsync(String articleUrl) {
-        return CompletableFuture.supplyAsync(() -> {
+        return asyncUtils.asyncIo(() -> {
             try {
                 RequestConfig config = new RequestConfig(
                         rssConfig.getMaxRetries(),
@@ -139,18 +141,18 @@ public class RssParserService {
                 log.error("Ошибка при извлечении полного описания: {}", e.getMessage(), e);
                 return "";
             }
-        });
+        }, "Извлечение описания статьи " + articleUrl);
     }
 
     private CompletableFuture<String> extractImageFromArticleAsync(String articleUrl) {
-        return CompletableFuture.supplyAsync(() -> {
+        return asyncUtils.asyncIo(() -> {
             try {
                 return extractImageWithRetries(articleUrl, 0);
             } catch (Exception e) {
                 log.error("Ошибка при извлечении изображения из статьи {}", articleUrl, e);
                 return "";
             }
-        });
+        }, "Извлечение изображения из статьи " + articleUrl);
     }
 
     private String extractImageWithRetries(String articleUrl, int attemptCount) throws Exception {
@@ -268,9 +270,9 @@ public class RssParserService {
                     ? extractFullDescriptionAsync(link)
                     : CompletableFuture.completedFuture(description);
 
-            // Комбинируем результаты асинхронных задач
+            // Комбинируем результаты асинхронных задач с использованием utility-класса
             CompletableFuture<NewsItem> newsItemFuture = imageFuture
-                    .thenCombine(descriptionFuture, (imageUrl, fullDescription) ->
+                    .thenCombineAsync(descriptionFuture, (imageUrl, fullDescription) ->
                             NewsItem.builder()
                                     .title(basicNewsItem.getTitle())
                                     .url(basicNewsItem.getUrl())
@@ -279,7 +281,7 @@ public class RssParserService {
                                     .description(fullDescription)
                                     .category(basicNewsItem.getCategory())
                                     .build()
-                    );
+                    , asyncUtils.getCpuExecutor());
 
             futureCategoryMap.put(normalizedCategory, newsItemFuture);
 
@@ -291,14 +293,27 @@ public class RssParserService {
 
         // Ожидаем завершения всех асинхронных задач
         Map<String, NewsItem> result = new HashMap<>();
-        futureCategoryMap.forEach((category, future) -> {
-            try {
-                result.put(category, future.get());
-            } catch (InterruptedException | ExecutionException e) {
-                log.error("Ошибка при получении данных для категории {}: {}", category, e.getMessage(), e);
-                Thread.currentThread().interrupt();
-            }
-        });
+        
+        // Используем allOf для ожидания всех задач
+        List<CompletableFuture<?>> allFutures = new ArrayList<>(futureCategoryMap.values());
+        try {
+            CompletableFuture.allOf(allFutures.toArray(new CompletableFuture[0])).get();
+            
+            // Когда все задачи завершены, собираем результаты
+            futureCategoryMap.forEach((category, future) -> {
+                try {
+                    NewsItem newsItem = future.getNow(null);
+                    if (newsItem != null) {
+                        result.put(category, newsItem);
+                    }
+                } catch (Exception e) {
+                    log.error("Ошибка при получении данных для категории {}: {}", category, e.getMessage(), e);
+                }
+            });
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("Ошибка при ожидании всех задач: {}", e.getMessage(), e);
+            Thread.currentThread().interrupt();
+        }
 
         log.info("Успешно обработаны новости для {} категорий из {}",
                 result.size(), targetCategories.size());
