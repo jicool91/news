@@ -31,7 +31,7 @@ public class NewsPosterService {
         String category = getCategoryByChannelId(channelId);
         String channelLink = CHANNEL_LINKS.getOrDefault(category, "");
 
-        String title = newsTitle != null && !newsTitle.isBlank() ? "**" + newsTitle + "**\n\n" : "";
+        String title = newsTitle != null && !newsTitle.isBlank() ? "*" + newsTitle + "*\n\n" : "";
         String subscribe = "🔔 [Подписаться](" + channelLink + ")";
 
         String processedDescription = "";
@@ -58,9 +58,14 @@ public class NewsPosterService {
 
                     int cutPoint = Math.max(lastNewLine, lastSentence);
 
-                    // Если не нашли подходящее место для обрезки, просто обрезаем по длине
+                    // Если не нашли подходящее место для обрезки, ищем последний пробел
                     if (cutPoint <= 0 || cutPoint < maxDescriptionLength - 100) {
-                        cutPoint = maxDescriptionLength;
+                        int lastSpace = description.substring(0, maxDescriptionLength).lastIndexOf(" ");
+                        if (lastSpace > 0) {
+                            cutPoint = lastSpace;
+                        } else {
+                            cutPoint = maxDescriptionLength;
+                        }
                     } else {
                         // Если нашли место для обрезки по предложению, добавляем точку
                         if (cutPoint == lastSentence) {
@@ -92,6 +97,12 @@ public class NewsPosterService {
                 int newTextLength = readMoreIndex - excessLength - 10; // 10 символов для запаса
 
                 if (newTextLength > 0) {
+                    // Ищем последний пробел перед обрезкой
+                    int lastSpace = processedDescription.substring(0, newTextLength).lastIndexOf(" ");
+                    if (lastSpace > 0) {
+                        newTextLength = lastSpace;
+                    }
+
                     // Обрезаем текст и сохраняем "читать полностью" на отдельной строке
                     processedDescription = processedDescription.substring(0, newTextLength) +
                             "\n\n[" + READ_MORE_TEXT + "](" + newsUrl + ")\n\n";
@@ -102,7 +113,15 @@ public class NewsPosterService {
                 int excessLength = formattedMessage.length() - MAX_CAPTION_LENGTH + READ_MORE_TEXT.length() + 20;
 
                 if (processedDescription.length() > excessLength) {
-                    processedDescription = processedDescription.substring(0, processedDescription.length() - excessLength) +
+                    // Ищем последний пробел перед обрезкой
+                    int cutPosition = processedDescription.length() - excessLength;
+                    int lastSpace = processedDescription.substring(0, cutPosition).lastIndexOf(" ");
+
+                    if (lastSpace > 0) {
+                        cutPosition = lastSpace;
+                    }
+
+                    processedDescription = processedDescription.substring(0, cutPosition) +
                             "\n\n[" + READ_MORE_TEXT + "](" + newsUrl + ")\n\n";
                     formattedMessage = title + processedDescription + subscribe;
                 }
