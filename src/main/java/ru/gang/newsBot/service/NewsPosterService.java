@@ -19,9 +19,6 @@ public class NewsPosterService {
 
     private final NewsChannelConfig newsChannelConfig;
 
-    @Value("${telegram.bot.username}")
-    private String botUsername;
-
     private static final Map<String, String> CHANNEL_LINKS = Map.of(
             "former_ussr", "https://t.me/News_Ukraine_project",
             "russia", "https://t.me/News_Russia_project",
