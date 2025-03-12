@@ -12,14 +12,13 @@ public class NewsPosterService {
     private static final int MAX_CAPTION_LENGTH = 1024;
 
     public SendPhoto buildPhotoMessage(String newsTitle, String newsUrl, String newsSource, String imageUrl, String description, String channelId) {
-        String formattedMessage = "📢 *Главная новость дня* 📢\n\n"
-                + (newsTitle != null && !newsTitle.isBlank() ? "*" + newsTitle + "*\n\n" : "")
+        String formattedMessage = (newsTitle != null && !newsTitle.isBlank() ? "*" + newsTitle + "*\n\n" : "")
                 + (description != null && !description.isBlank() ? description + "\n\n" : "")
                 + "🔗 [Читать полностью](" + newsUrl + ")";
 
         if (formattedMessage.length() > MAX_CAPTION_LENGTH) {
             log.debug("Сообщение превышает лимит Telegram ({}), обрезаем", MAX_CAPTION_LENGTH);
-            formattedMessage = formattedMessage.substring(0, MAX_CAPTION_LENGTH - 3) + "...";
+            formattedMessage = formattedMessage.substring(0, MAX_CAPTION_LENGTH - 2) + "...";
         }
 
         SendPhoto photoMessage = new SendPhoto();
