@@ -14,6 +14,8 @@
 target/
 src/main/resources/application.properties
 /apache-maven-3.9.9
+rss.txt
+sent_news.txt
 # Package Files #
 *.jar
 *.war

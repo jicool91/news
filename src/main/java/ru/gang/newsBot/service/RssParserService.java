@@ -57,18 +57,23 @@ public class RssParserService {
     }
 
     private String extractFullDescription(String articleUrl) {
-        try {
-            Document articleDoc = Jsoup.connect(articleUrl)
-                    .userAgent("Mozilla/5.0")
-                    .timeout(10000)
-                    .get();
-            Element descriptionElement = articleDoc.selectFirst("meta[name=description]");
-            return descriptionElement != null ? descriptionElement.attr("content") : "";
-        } catch (Exception e) {
-            System.err.println("❌ Ошибка при извлечении полного описания: " + e.getMessage());
-            return "";
+        for (int i = 0; i < 3; i++) {
+            try {
+                Document articleDoc = Jsoup.connect(articleUrl)
+                        .userAgent("Mozilla/5.0")
+                        .timeout(10000)
+                        .get();
+                Element descriptionElement = articleDoc.selectFirst("meta[name=description]");
+                return descriptionElement != null ? descriptionElement.attr("content") : "";
+            } catch (Exception e) {
+                if (i == 2) {
+                    return "";
+                }
+            }
         }
+        return "";
     }
+
 
 
     private List<NewsItem> parseRss(String rssUrl) throws Exception {
@@ -129,7 +134,7 @@ public class RssParserService {
         try {
             Document articleDoc = Jsoup.connect(articleUrl)
                     .userAgent("Mozilla/5.0")
-                    .timeout(10000)
+                    .timeout(20000)
                     .get();
             Element metaOgImage = articleDoc.selectFirst("meta[property=og:image]");
             return metaOgImage != null ? metaOgImage.attr("content") : "";
