@@ -13,6 +13,7 @@
 .gitignore
 target/
 src/main/resources/application.properties
+src/main/resources/logback.xml
 /apache-maven-3.9.9
 rss.txt
 sent_news.txt

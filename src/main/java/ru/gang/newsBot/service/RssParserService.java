@@ -1,24 +1,25 @@
 package ru.gang.newsBot.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.jsoup.Connection;
-import org.jsoup.Jsoup;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
 import ru.gang.newsBot.config.NewsChannelConfig;
+import ru.gang.newsBot.config.RssConfig;
 import ru.gang.newsBot.model.NewsItem;
+import ru.gang.newsBot.util.HttpRequestUtil;
+import ru.gang.newsBot.util.HttpRequestUtil.RequestConfig;
 
 import java.util.*;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class RssParserService {
-    private static final Logger log = LoggerFactory.getLogger(RssParserService.class);
-
     private final NewsChannelConfig newsChannelConfig;
-    private final Map<String, String> categoryToChannel;
+    private final RssConfig rssConfig;
 
     private static final Map<String, String> categoryTranslation = Map.of(
             "Бывший СССР", "former_ussr",
@@ -26,12 +27,6 @@ public class RssParserService {
             "Мир", "world",
             "Экономика", "economy"
     );
-
-    public RssParserService(NewsChannelConfig newsChannelConfig) {
-        this.newsChannelConfig = newsChannelConfig;
-        this.categoryToChannel = newsChannelConfig.getChannels();
-        log.info("Загруженные категории: {}", categoryToChannel);
-    }
 
     public String getCategoryChannel(String category) {
         return newsChannelConfig.getChannelByEnglishCategory(category);
@@ -60,10 +55,12 @@ public class RssParserService {
 
     private String extractFullDescription(String articleUrl) {
         try {
-            Document articleDoc = Jsoup.connect(articleUrl)
-                    .userAgent("Mozilla/5.0")
-                    .timeout(10000)
-                    .get();
+            RequestConfig config = new RequestConfig(
+                    rssConfig.getMaxRetries(), 
+                    rssConfig.getTimeout(), 
+                    rssConfig.getMaxTimeout());
+            
+            Document articleDoc = HttpRequestUtil.fetchWithRetry(articleUrl, config);
             Element descriptionElement = articleDoc.selectFirst("meta[name=description]");
             String description = descriptionElement != null ? descriptionElement.attr("content") : "";
             log.debug("Извлечено полное описание ({}): {}", articleUrl, description);
@@ -77,12 +74,12 @@ public class RssParserService {
     private List<NewsItem> parseRss(String rssUrl) throws Exception {
         List<NewsItem> newsList = new ArrayList<>();
 
-        Connection connection = Jsoup.connect(rssUrl)
-                .userAgent("Mozilla/5.0")
-                .header("Accept", "application/rss+xml")
-                .timeout(10000);
-
-        Document rssDoc = connection.get();
+        RequestConfig config = new RequestConfig(
+                rssConfig.getMaxRetries(), 
+                rssConfig.getTimeout(), 
+                rssConfig.getMaxTimeout());
+        
+        Document rssDoc = HttpRequestUtil.fetchWithRetry(rssUrl, config);
         Elements items = rssDoc.select("item");
         log.debug("Найдено элементов <item>: {}", items.size());
 
@@ -101,7 +98,7 @@ public class RssParserService {
             String normalizedCategory = categoryTranslation.getOrDefault(category, category).toLowerCase();
             log.debug("Категория переведена: {} -> {}", category, normalizedCategory);
 
-            if (!categoryToChannel.containsKey(normalizedCategory)) {
+            if (!newsChannelConfig.getChannels().containsKey(normalizedCategory)) {
                 log.debug("Пропускаем категорию: {} (нет в списке)", category);
                 continue;
             }
@@ -113,7 +110,6 @@ public class RssParserService {
 
             String source = getSourceName(rssUrl);
 
-            // Если описание пустое, загружаем его со страницы новости
             if (description.isEmpty()) {
                 description = extractFullDescription(link);
             }
@@ -140,10 +136,12 @@ public class RssParserService {
 
     private String extractImageFromArticle(String articleUrl) {
         try {
-            Document articleDoc = Jsoup.connect(articleUrl)
-                    .userAgent("Mozilla/5.0")
-                    .timeout(10000)
-                    .get();
+            RequestConfig config = new RequestConfig(
+                    rssConfig.getMaxRetries(), 
+                    rssConfig.getTimeout(), 
+                    rssConfig.getMaxTimeout());
+            
+            Document articleDoc = HttpRequestUtil.fetchWithRetry(articleUrl, config);
             Element metaOgImage = articleDoc.selectFirst("meta[property=og:image]");
             String imageUrl = metaOgImage != null ? metaOgImage.attr("content") : "";
             log.debug("Извлечена картинка для {}: {}", articleUrl, imageUrl);
