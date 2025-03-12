@@ -1,16 +1,20 @@
 package ru.gang.newsBot.service;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import java.util.*;
 
 @Service
 @RequiredArgsConstructor
 public class NewsAnalyzerService {
+    private static final Logger log = LoggerFactory.getLogger(NewsAnalyzerService.class);
 
     private final List<String> stopWords = List.of("в", "на", "и", "по", "за", "что", "из", "с", "как", "от", "о");
 
     public Map<String, Integer> analyzeNews(List<String> headlines) {
+        log.info("Начало анализа {} заголовков", headlines.size());
         Map<String, Integer> wordFrequency = new HashMap<>();
 
         for (String headline : headlines) {
@@ -22,7 +26,10 @@ public class NewsAnalyzerService {
             }
         }
 
-        return sortByValue(wordFrequency);
+        Map<String, Integer> result = sortByValue(wordFrequency);
+        log.info("Анализ завершен, найдено {} уникальных слов, выбрано топ {}", 
+                wordFrequency.size(), result.size());
+        return result;
     }
 
     private Map<String, Integer> sortByValue(Map<String, Integer> map) {
