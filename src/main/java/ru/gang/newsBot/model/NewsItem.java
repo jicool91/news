@@ -1,9 +1,14 @@
 package ru.gang.newsBot.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import lombok.Getter;
-
-@Getter
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class NewsItem {
     private String title;
     private String url;
@@ -11,13 +16,4 @@ public class NewsItem {
     private String imageUrl;
     private String description;
     private String category;
-
-    public NewsItem(String title, String url, String source, String imageUrl, String description, String category) {
-        this.title = title;
-        this.url = url;
-        this.source = source;
-        this.imageUrl = imageUrl;
-        this.description = description;
-        this.category = category;
-    }
 }

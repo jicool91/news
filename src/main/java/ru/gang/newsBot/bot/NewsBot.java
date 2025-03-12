@@ -1,5 +1,6 @@
 package ru.gang.newsBot.bot;
 
+import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.DefaultBotOptions;
@@ -25,12 +26,21 @@ public class NewsBot extends TelegramLongPollingBot {
     private final NewsAnalyzerService newsAnalyzerService;
     private final NewsPosterService newsPosterService;
 
+    @Getter
     private final Set<String> sentNews = new HashSet<>();
 
+    @Value("${telegram.bot.username}")
+    private String botUsername;
+
+    @Value("${telegram.bot.token}")
+    private String botToken;
+
+    private static final String SENT_NEWS_FILE = "sent_news.txt";
+
     public NewsBot(DefaultBotOptions options,
-                   RssParserService rssParserService,
-                   NewsAnalyzerService newsAnalyzerService,
-                   NewsPosterService newsPosterService) {
+                  RssParserService rssParserService,
+                  NewsAnalyzerService newsAnalyzerService,
+                  NewsPosterService newsPosterService) {
         super(options);
         this.rssParserService = rssParserService;
         this.newsAnalyzerService = newsAnalyzerService;
@@ -38,18 +48,14 @@ public class NewsBot extends TelegramLongPollingBot {
         System.out.println("✅ Бот успешно запущен и подключен к Telegram API");
     }
 
-    @Value("${telegram.bot.username}")
     @Override
     public String getBotUsername() {
-        // Укажите имя вашего бота
-        return "News_parser_all_bot";
+        return botUsername;
     }
 
-    @Value("${telegram.bot.token}")
     @Override
     public String getBotToken() {
-        // Укажите ваш реальный API-токен
-        return "7911138040:AAGVHPinpk116wKKMJ87KBKK6GuPQN28ESA";
+        return botToken;
     }
 
     @Override
@@ -82,11 +88,10 @@ public class NewsBot extends TelegramLongPollingBot {
     public void fetchAndPostNews() {
         System.out.println("🔄 Запущено обновление новостей...");
 
-        // Загружаем уже отправленные новости из файла
         loadSentNews();
 
         List<NewsItem> newsList = rssParserService.fetchNewsWithCategory();
-        Set<String> sentCategories = new HashSet<>(); // Для отслеживания уже отправленных категорий
+        Set<String> sentCategories = new HashSet<>();
 
         System.out.println("📌 Финальный список отправки новостей:");
         for (NewsItem news : newsList) {
@@ -123,9 +128,9 @@ public class NewsBot extends TelegramLongPollingBot {
 
             try {
                 execute(photoMessage);
-                sentNews.add(news.getUrl()); // Добавляем новость в список отправленных
-                sentCategories.add(news.getCategory()); // Запоминаем, что отправлена новость этой категории
-                saveSentNews(); // Сохраняем в файл
+                sentNews.add(news.getUrl());
+                sentCategories.add(news.getCategory());
+                saveSentNews();
                 System.out.println("✅ Новость отправлена в канал: " + channelId);
             } catch (TelegramApiException e) {
                 System.err.println("❌ Ошибка при отправке фото: " + e.getMessage());
@@ -133,9 +138,6 @@ public class NewsBot extends TelegramLongPollingBot {
         }
     }
 
-    private static final String SENT_NEWS_FILE = "sent_news.txt";
-
-    // Загружаем отправленные новости из файла
     private void loadSentNews() {
         try (BufferedReader reader = new BufferedReader(new FileReader(SENT_NEWS_FILE))) {
             String line;
@@ -147,7 +149,6 @@ public class NewsBot extends TelegramLongPollingBot {
         }
     }
 
-    // Сохраняем отправленные новости в файл
     private void saveSentNews() {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(SENT_NEWS_FILE))) {
             for (String newsUrl : sentNews) {
@@ -158,7 +159,4 @@ public class NewsBot extends TelegramLongPollingBot {
             System.err.println("❌ Ошибка при сохранении отправленных новостей: " + e.getMessage());
         }
     }
-
-
-
 }

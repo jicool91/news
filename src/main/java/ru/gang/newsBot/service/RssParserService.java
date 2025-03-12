@@ -1,5 +1,6 @@
 package ru.gang.newsBot.service;
 
+import lombok.RequiredArgsConstructor;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -15,7 +16,6 @@ import java.util.*;
 public class RssParserService {
 
     private final NewsChannelConfig newsChannelConfig;
-
     private final Map<String, String> categoryToChannel;
 
     private static final Map<String, String> categoryTranslation = Map.of(
@@ -25,9 +25,9 @@ public class RssParserService {
             "Экономика", "economy"
     );
 
-    public RssParserService(NewsChannelConfig newsChannelConfig, NewsChannelConfig config) {
+    public RssParserService(NewsChannelConfig newsChannelConfig) {
         this.newsChannelConfig = newsChannelConfig;
-        this.categoryToChannel = config.getChannels();
+        this.categoryToChannel = newsChannelConfig.getChannels();
         System.out.println("📌 Загруженные категории: " + categoryToChannel);
     }
 
@@ -59,19 +59,15 @@ public class RssParserService {
     private List<NewsItem> parseRss(String rssUrl) throws Exception {
         List<NewsItem> newsList = new ArrayList<>();
 
-        // Подключаемся к RSS-ленте
         Connection connection = Jsoup.connect(rssUrl)
                 .userAgent("Mozilla/5.0")
                 .header("Accept", "application/rss+xml")
                 .timeout(10000);
 
-        // Загружаем XML
         Document rssDoc = connection.get();
 
-        // Выводим весь XML для проверки
         System.out.println("🔍 Содержимое RSS: \n" + rssDoc);
 
-        // Ищем элементы <item>
         Elements items = rssDoc.select("item");
         System.out.println("🔍 Найдено элементов <item>: " + items.size());
 
@@ -79,7 +75,6 @@ public class RssParserService {
         for (Element item : items) {
             if (count >= maxItems) break;
 
-            // Читаем данные новости
             String title = item.select("title").text();
             String link = item.select("link").text();
             String description = item.select("description").text().trim();
@@ -88,11 +83,9 @@ public class RssParserService {
             System.out.println("📌 Обнаружена новость: " + title);
             System.out.println("🏷 Категория (оригинал): " + category);
 
-            // Перевод категории через словарь
             String normalizedCategory = categoryTranslation.getOrDefault(category, category).toLowerCase();
             System.out.println("✅ Категория переведена: " + category + " -> " + normalizedCategory);
 
-            // Логируем доступные категории из пропертей
             System.out.println("📌 Доступные категории: " + categoryToChannel.keySet());
 
             if (!categoryToChannel.containsKey(normalizedCategory)) {
@@ -100,22 +93,25 @@ public class RssParserService {
                 continue;
             }
 
-            // Получаем изображение
             String imageUrl = item.select("enclosure[url]").attr("url");
             if (imageUrl.isEmpty()) {
                 imageUrl = extractImageFromArticle(link);
             }
 
-            // Определяем источник
             String source = getSourceName(rssUrl);
 
-            // Добавляем новость
-            newsList.add(new NewsItem(title, link, source, imageUrl, description, normalizedCategory));
+            newsList.add(NewsItem.builder()
+                    .title(title)
+                    .url(link)
+                    .source(source)
+                    .imageUrl(imageUrl)
+                    .description(description)
+                    .category(normalizedCategory)
+                    .build());
             count++;
         }
         return newsList;
     }
-
 
     private String getSourceName(String rssUrl) {
         if (rssUrl.contains("lenta.ru")) return "Lenta.ru";

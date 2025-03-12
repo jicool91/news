@@ -14,9 +14,9 @@
 
     <properties>
         <java.version>17</java.version>
-        <spring-boot.version>3.2.2</spring-boot.version> <!-- Обновлённая версия -->
+        <spring-boot.version>3.2.2</spring-boot.version>
         <telegram-bots.version>6.9.7.1</telegram-bots.version>
-        <postgresql.version>42.7.2</postgresql.version> <!-- Последняя версия PostgreSQL -->
+        <postgresql.version>42.7.2</postgresql.version>
         <lombok.version>1.18.30</lombok.version>
         <maven-compiler.version>3.8.1</maven-compiler.version>
     </properties>
@@ -86,18 +86,10 @@
         </dependency>
 
         <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <version>42.6.0</version>
-        </dependency>
-
-        <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
             <version>1.15.4</version>
         </dependency>
-
-
 
         <dependency>
             <groupId>javax.xml.bind</groupId>
@@ -152,7 +144,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>ru.gang.datingBot.MainApplication</mainClass>
+                            <mainClass>ru.gang.newsBot.NewsBotApplication</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

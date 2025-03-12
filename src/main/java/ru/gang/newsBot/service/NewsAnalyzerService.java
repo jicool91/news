@@ -1,9 +1,11 @@
 package ru.gang.newsBot.service;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.util.*;
 
 @Service
+@RequiredArgsConstructor
 public class NewsAnalyzerService {
 
     private final List<String> stopWords = List.of("в", "на", "и", "по", "за", "что", "из", "с", "как", "от", "о");
@@ -28,7 +30,7 @@ public class NewsAnalyzerService {
         list.sort((a, b) -> b.getValue().compareTo(a.getValue()));
 
         Map<String, Integer> sortedMap = new LinkedHashMap<>();
-        for (int i = 0; i < Math.min(10, list.size()); i++) { // Топ-10 слов
+        for (int i = 0; i < Math.min(10, list.size()); i++) {
             sortedMap.put(list.get(i).getKey(), list.get(i).getValue());
         }
         return sortedMap;
