@@ -1,15 +1,15 @@
 package ru.gang.newsBot;
 
-import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.telegram.telegrambots.bots.DefaultBotOptions;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
-import org.telegram.telegrambots.bots.DefaultBotOptions;
-import org.springframework.context.annotation.Bean;
 import ru.gang.newsBot.bot.NewsBot;
 
 @Slf4j
@@ -17,6 +17,7 @@ import ru.gang.newsBot.bot.NewsBot;
 @EnableScheduling
 public class NewsBotApplication {
 
+    @SneakyThrows
     public static void main(String[] args) {
         ApplicationContext context = SpringApplication.run(NewsBotApplication.class, args);
 

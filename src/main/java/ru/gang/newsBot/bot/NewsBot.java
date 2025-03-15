@@ -1,7 +1,7 @@
 package ru.gang.newsBot.bot;
 
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -35,11 +35,8 @@ public class NewsBot extends TelegramLongPollingBot {
     @Getter
     private final Set<String> sentNews = new HashSet<>();
 
-    @Value("${telegram.bot.username}")
-    private String botUsername;
-
-    @Value("${telegram.bot.token}")
-    private String botToken;
+    @Value("${telegram.bot.username}") private String botUsername;
+    @Value("${telegram.bot.token}") private String botToken;
 
     private static final String SENT_NEWS_FILE = "sent_news.txt";
 
@@ -68,13 +65,9 @@ public class NewsBot extends TelegramLongPollingBot {
 
     @Override
     public void onUpdateReceived(Update update) {
-        log.debug("Получен update: {}", update);
-
         if (update.hasMessage() && update.getMessage().hasText()) {
             String text = update.getMessage().getText();
             Long chatId = update.getMessage().getChatId();
-
-            log.info("Получено сообщение: {}", text);
 
             if ("/fetch".equals(text)) {
                 log.info("Команда /fetch обработана!");
@@ -84,10 +77,10 @@ public class NewsBot extends TelegramLongPollingBot {
         }
     }
 
+    @SneakyThrows
     private void sendTextMessage(Long chatId, String text) {
         try {
-            SendMessage message = new SendMessage(chatId.toString(), text);
-            execute(message);
+            execute(new SendMessage(chatId.toString(), text));
         } catch (TelegramApiException e) {
             log.error("Ошибка при отправке текстового сообщения", e);
         }
@@ -95,14 +88,10 @@ public class NewsBot extends TelegramLongPollingBot {
 
     public void fetchAndPostNews() {
         log.info("Запущено обновление новостей...");
-
         asyncUtils.asyncIoRun(this::loadSentNews);
 
         Map<String, NewsItem> categoryNewsMap = rssParserService.fetchLatestNewsByCategory();
-
         log.info("Финальный список отправки новостей: {} категорий", categoryNewsMap.size());
-        categoryNewsMap.forEach((category, news) ->
-                log.debug("Новость: {} | Категория: {}", news.getTitle(), news.getCategory()));
 
         Set<CompletableFuture<Void>> sendFutures = new HashSet<>();
 
@@ -112,38 +101,27 @@ public class NewsBot extends TelegramLongPollingBot {
                 return;
             }
 
-            log.info("Отправка новости: {}", news.getTitle());
-
             String channelId = rssParserService.getCategoryChannel(news.getCategory());
             if (channelId == null) {
                 log.warn("Не найден канал для категории: {}", news.getCategory());
                 return;
             }
 
-            log.debug("Готовим отправку в канал {} для категории {}", channelId, news.getCategory());
-
             String description = news.getDescription().trim();
             if (description.isEmpty()) {
-                log.debug("Описание отсутствует, подставляем заглушку.");
                 description = "Описание недоступно. Подробнее по ссылке ниже.";
             }
 
             SendPhoto photoMessage = newsPosterService.buildPhotoMessage(
-                    news.getTitle(),
-                    news.getUrl(),
-                    news.getSource(),
-                    news.getImageUrl(),
-                    news.getDescription(),
-                    channelId
+                    news.getTitle(), news.getUrl(), news.getSource(),
+                    news.getImageUrl(), news.getDescription(), channelId
             );
 
-            String finalDescription = description;
             CompletableFuture<Void> sendFuture = asyncUtils.asyncIo(() -> {
                 try {
                     execute(photoMessage);
                     sentNews.add(news.getUrl());
                     saveSentNews();
-                    log.info("Новость успешно отправлена в канал: {}", channelId);
                     return true;
                 } catch (TelegramApiException e) {
                     log.error("Ошибка при отправке фото: {}", e.getMessage(), e);
@@ -159,14 +137,9 @@ public class NewsBot extends TelegramLongPollingBot {
         });
 
         if (!sendFutures.isEmpty()) {
-            CompletableFuture<Void> allSendFutures = CompletableFuture.allOf(
-                    sendFutures.toArray(new CompletableFuture[0])
-            );
-
-            allSendFutures.thenRun(() ->
-                    log.info("Все новости обработаны, отправлено {} из {} новостей",
-                            sendFutures.size(), categoryNewsMap.size())
-            );
+            CompletableFuture.allOf(sendFutures.toArray(new CompletableFuture[0]))
+                    .thenRun(() -> log.info("Все новости обработаны, отправлено {} из {} новостей",
+                            sendFutures.size(), categoryNewsMap.size()));
         }
     }
 
@@ -189,7 +162,6 @@ public class NewsBot extends TelegramLongPollingBot {
                     writer.write(newsUrl);
                     writer.newLine();
                 }
-                log.debug("Сохранено {} отправленных новостей", sentNews.size());
             } catch (IOException e) {
                 log.error("Ошибка при сохранении отправленных новостей", e);
             }
