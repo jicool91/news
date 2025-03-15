@@ -12,7 +12,6 @@ import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import ru.gang.newsBot.model.NewsItem;
-import ru.gang.newsBot.service.NewsAnalyzerService;
 import ru.gang.newsBot.service.NewsPosterService;
 import ru.gang.newsBot.service.RssParserService;
 import ru.gang.newsBot.util.AsyncUtils;
@@ -28,7 +27,6 @@ import java.util.concurrent.CompletableFuture;
 public class NewsBot extends TelegramLongPollingBot {
 
     private final RssParserService rssParserService;
-    private final NewsAnalyzerService newsAnalyzerService;
     private final NewsPosterService newsPosterService;
     private final AsyncUtils asyncUtils;
 
@@ -42,12 +40,10 @@ public class NewsBot extends TelegramLongPollingBot {
 
     public NewsBot(DefaultBotOptions options,
                    RssParserService rssParserService,
-                   NewsAnalyzerService newsAnalyzerService,
                    NewsPosterService newsPosterService,
                    AsyncUtils asyncUtils) {
         super(options);
         this.rssParserService = rssParserService;
-        this.newsAnalyzerService = newsAnalyzerService;
         this.newsPosterService = newsPosterService;
         this.asyncUtils = asyncUtils;
         log.info("Бот успешно запущен и подключен к Telegram API");
