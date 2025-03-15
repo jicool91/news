@@ -1,8 +1,8 @@
 package ru.gang.newsBot.bot;
 
 import lombok.Getter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.DefaultBotOptions;
@@ -23,9 +23,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 @Component
 public class NewsBot extends TelegramLongPollingBot {
-    private static final Logger log = LoggerFactory.getLogger(NewsBot.class);
 
     private final RssParserService rssParserService;
     private final NewsAnalyzerService newsAnalyzerService;
@@ -98,17 +98,14 @@ public class NewsBot extends TelegramLongPollingBot {
 
         asyncUtils.asyncIoRun(this::loadSentNews);
 
-        // Получаем последние новости по каждой категории
         Map<String, NewsItem> categoryNewsMap = rssParserService.fetchLatestNewsByCategory();
 
         log.info("Финальный список отправки новостей: {} категорий", categoryNewsMap.size());
         categoryNewsMap.forEach((category, news) ->
                 log.debug("Новость: {} | Категория: {}", news.getTitle(), news.getCategory()));
 
-        // Создаем список CompletableFuture для всех отправляемых новостей
         Set<CompletableFuture<Void>> sendFutures = new HashSet<>();
-        
-        // Отправляем каждую новость асинхронно
+
         categoryNewsMap.forEach((category, news) -> {
             if (sentNews.contains(news.getUrl())) {
                 log.debug("Пропуск: уже отправляли - {}", news.getTitle());
@@ -125,14 +122,12 @@ public class NewsBot extends TelegramLongPollingBot {
 
             log.debug("Готовим отправку в канал {} для категории {}", channelId, news.getCategory());
 
-            // Проверяем описание новости
             String description = news.getDescription().trim();
             if (description.isEmpty()) {
                 log.debug("Описание отсутствует, подставляем заглушку.");
                 description = "Описание недоступно. Подробнее по ссылке ниже.";
             }
 
-            // Создаем сообщение с фото
             SendPhoto photoMessage = newsPosterService.buildPhotoMessage(
                     news.getTitle(),
                     news.getUrl(),
@@ -142,7 +137,6 @@ public class NewsBot extends TelegramLongPollingBot {
                     channelId
             );
 
-            // Асинхронно отправляем сообщение с фото
             String finalDescription = description;
             CompletableFuture<Void> sendFuture = asyncUtils.asyncIo(() -> {
                 try {
@@ -164,16 +158,14 @@ public class NewsBot extends TelegramLongPollingBot {
             sendFutures.add(sendFuture);
         });
 
-        // Ожидаем завершения всех отправок
         if (!sendFutures.isEmpty()) {
             CompletableFuture<Void> allSendFutures = CompletableFuture.allOf(
                     sendFutures.toArray(new CompletableFuture[0])
             );
 
-            // Неблокирующее ожидание с логированием результата
-            allSendFutures.thenRun(() -> 
-                log.info("Все новости обработаны, отправлено {} из {} новостей", 
-                        sendFutures.size(), categoryNewsMap.size())
+            allSendFutures.thenRun(() ->
+                    log.info("Все новости обработаны, отправлено {} из {} новостей",
+                            sendFutures.size(), categoryNewsMap.size())
             );
         }
     }

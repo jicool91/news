@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class HttpRequestUtil {
-    
+
     @Getter
     @AllArgsConstructor
     public static class RequestConfig {
@@ -29,28 +29,28 @@ public class HttpRequestUtil {
         while (retries <= config.maxRetries) {
             try {
                 log.debug("Попытка #{} (таймаут: {}мс): {}", retries + 1, currentTimeout, url);
-                
+
                 Connection connection = Jsoup.connect(url)
                         .userAgent("Mozilla/5.0")
                         .timeout(currentTimeout);
-                
+
                 return connection.get();
             } catch (SocketTimeoutException e) {
                 lastException = e;
                 log.debug("Таймаут при попытке #{}: {}", retries + 1, e.getMessage());
-                
+
                 retries++;
                 if (retries <= config.maxRetries) {
                     int backoffMs = (int) Math.min(currentTimeout * 1.5, config.maxTimeoutMs);
                     log.debug("Повторная попытка через {}мс", backoffMs - currentTimeout);
-                    
+
                     try {
                         TimeUnit.MILLISECONDS.sleep(1000);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         throw ie;
                     }
-                    
+
                     currentTimeout = backoffMs;
                 }
             } catch (Exception e) {

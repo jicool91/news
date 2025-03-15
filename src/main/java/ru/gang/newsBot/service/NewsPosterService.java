@@ -1,8 +1,7 @@
 package ru.gang.newsBot.service;
 
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
@@ -10,10 +9,10 @@ import ru.gang.newsBot.config.NewsChannelConfig;
 
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NewsPosterService {
-    private static final Logger log = LoggerFactory.getLogger(NewsPosterService.class);
     private static final int MAX_CAPTION_LENGTH = 1024;
     private static final int SHORT_TEXT_THRESHOLD = 900;
     private static final String READ_MORE_TEXT = "...читать полностью";
@@ -38,27 +37,20 @@ public class NewsPosterService {
         boolean isShortText = description == null || description.length() <= SHORT_TEXT_THRESHOLD;
 
         if (description != null && !description.isBlank()) {
-            // Дополнительная строка перед кнопкой подписки для отрыва
-            int reservedSpace = title.length() + subscribe.length() + 40; // 40 символов для запаса и дополнительного отрыва
+            int reservedSpace = title.length() + subscribe.length() + 40;
             int availableSpace = MAX_CAPTION_LENGTH - reservedSpace;
 
             if (isShortText && description.length() <= availableSpace) {
-                // Если текст короткий и помещается полностью
                 processedDescription = description + "\n\n";
             } else {
-                // Обрезаем текст до SHORT_TEXT_THRESHOLD или меньше, если нужно уместить в сообщение
                 int maxDescriptionLength = Math.min(SHORT_TEXT_THRESHOLD, availableSpace - READ_MORE_TEXT.length() - 10);
 
                 if (description.length() > maxDescriptionLength) {
-                    // Если нужно обрезать текст
-
-                    // Находим последний абзац или предложение перед обрезкой
                     int lastNewLine = description.substring(0, maxDescriptionLength).lastIndexOf("\n\n");
                     int lastSentence = description.substring(0, maxDescriptionLength).lastIndexOf(". ");
 
                     int cutPoint = Math.max(lastNewLine, lastSentence);
 
-                    // Если не нашли подходящее место для обрезки, ищем последний пробел
                     if (cutPoint <= 0 || cutPoint < maxDescriptionLength - 100) {
                         int lastSpace = description.substring(0, maxDescriptionLength).lastIndexOf(" ");
                         if (lastSpace > 0) {
@@ -67,15 +59,12 @@ public class NewsPosterService {
                             cutPoint = maxDescriptionLength;
                         }
                     } else {
-                        // Если нашли место для обрезки по предложению, добавляем точку
                         if (cutPoint == lastSentence) {
-                            cutPoint += 1; // включаем точку
+                            cutPoint += 1;
                         }
                     }
 
                     String mainText = description.substring(0, cutPoint);
-
-                    // Добавляем "...читать полностью" на отдельной строке
                     processedDescription = mainText + "\n\n[" + READ_MORE_TEXT + "](" + newsUrl + ")\n\n";
                 } else {
                     processedDescription = description + "\n\n[" + READ_MORE_TEXT + "](" + newsUrl + ")\n\n";
@@ -88,32 +77,26 @@ public class NewsPosterService {
         if (formattedMessage.length() > MAX_CAPTION_LENGTH) {
             log.warn("Сообщение превышает лимит после оптимизации: {} символов", formattedMessage.length());
 
-            // Находим позицию "...читать полностью"
             int readMoreIndex = processedDescription.indexOf(READ_MORE_TEXT);
 
             if (readMoreIndex > 0) {
-                // Если "читать полностью" уже есть, сократим текст перед ним
                 int excessLength = formattedMessage.length() - MAX_CAPTION_LENGTH;
-                int newTextLength = readMoreIndex - excessLength - 10; // 10 символов для запаса
+                int newTextLength = readMoreIndex - excessLength - 10;
 
                 if (newTextLength > 0) {
-                    // Ищем последний пробел перед обрезкой
                     int lastSpace = processedDescription.substring(0, newTextLength).lastIndexOf(" ");
                     if (lastSpace > 0) {
                         newTextLength = lastSpace;
                     }
 
-                    // Обрезаем текст и сохраняем "читать полностью" на отдельной строке
                     processedDescription = processedDescription.substring(0, newTextLength) +
                             "\n\n[" + READ_MORE_TEXT + "](" + newsUrl + ")\n\n";
                     formattedMessage = title + processedDescription + subscribe;
                 }
             } else {
-                // Если "читать полностью" еще нет в тексте
                 int excessLength = formattedMessage.length() - MAX_CAPTION_LENGTH + READ_MORE_TEXT.length() + 20;
 
                 if (processedDescription.length() > excessLength) {
-                    // Ищем последний пробел перед обрезкой
                     int cutPosition = processedDescription.length() - excessLength;
                     int lastSpace = processedDescription.substring(0, cutPosition).lastIndexOf(" ");
 

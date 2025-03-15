@@ -59,9 +59,6 @@ public class AdaptiveThreadPoolManager {
         this.threadPoolMonitor = threadPoolMonitor;
     }
 
-    /**
-     * Периодически логирует состояние пулов потоков
-     */
     @Scheduled(fixedRateString = "${thread-pool.monitoring.log-interval-ms:60000}")
     public void logThreadPoolMetrics() {
         Map<String, ThreadPoolStats> stats = threadPoolMonitor.getStats();
@@ -77,9 +74,6 @@ public class AdaptiveThreadPoolManager {
         });
     }
 
-    /**
-     * Адаптивно корректирует размер пулов потоков на основе нагрузки
-     */
     @Scheduled(fixedRateString = "${thread-pool.adaptive.adjustment-interval-ms:300000}")
     public void adjustPoolSizes() {
         if (!adaptiveEnabled) {
@@ -92,9 +86,6 @@ public class AdaptiveThreadPoolManager {
         adjustCpuPoolSize();
     }
 
-    /**
-     * Корректирует размер пула для IO-операций
-     */
     private void adjustIoPoolSize() {
         ThreadPoolStats stats = threadPoolMonitor.getStats().get("ioTaskExecutor");
         if (stats == null) {
@@ -107,7 +98,6 @@ public class AdaptiveThreadPoolManager {
         int currentCoreSize = ioTaskExecutor.getCorePoolSize();
         int currentMaxSize = ioTaskExecutor.getMaxPoolSize();
 
-        // Если высокая загрузка - увеличиваем размер пула
         if (utilizationRate > ioHighLoadThreshold || queueUtilizationRate > 0.5) {
             int newCoreSize = Math.min(
                     (int)(currentCoreSize * scaleFactor),
@@ -127,7 +117,6 @@ public class AdaptiveThreadPoolManager {
                 updatePoolSize(ioTaskExecutor, newCoreSize, newMaxSize);
             }
         }
-        // Если низкая загрузка - уменьшаем размер пула
         else if (utilizationRate < ioLowLoadThreshold && queueUtilizationRate < 0.1) {
             int newCoreSize = Math.max(
                     (int)(currentCoreSize / scaleFactor),
@@ -149,9 +138,6 @@ public class AdaptiveThreadPoolManager {
         }
     }
 
-    /**
-     * Корректирует размер пула для CPU-операций
-     */
     private void adjustCpuPoolSize() {
         ThreadPoolStats stats = threadPoolMonitor.getStats().get("cpuTaskExecutor");
         if (stats == null) {
@@ -165,10 +151,8 @@ public class AdaptiveThreadPoolManager {
         int currentMaxSize = cpuTaskExecutor.getMaxPoolSize();
         int availableProcessors = Runtime.getRuntime().availableProcessors();
 
-        // Для CPU пула учитываем количество доступных процессоров
         int absoluteMaxSize = Math.min(cpuAbsoluteMaxSize, availableProcessors * 2);
 
-        // Если высокая загрузка - увеличиваем размер пула
         if (utilizationRate > cpuHighLoadThreshold || queueUtilizationRate > 0.5) {
             int newCoreSize = Math.min(
                     (int)(currentCoreSize * scaleFactor),
@@ -188,7 +172,6 @@ public class AdaptiveThreadPoolManager {
                 updatePoolSize(cpuTaskExecutor, newCoreSize, newMaxSize);
             }
         }
-        // Если низкая загрузка - уменьшаем размер пула
         else if (utilizationRate < cpuLowLoadThreshold && queueUtilizationRate < 0.1) {
             int newCoreSize = Math.max(
                     (int)(currentCoreSize / scaleFactor),
@@ -210,17 +193,11 @@ public class AdaptiveThreadPoolManager {
         }
     }
 
-    /**
-     * Обновляет размер пула потоков
-     */
     private void updatePoolSize(ThreadPoolTaskExecutor executor, int coreSize, int maxSize) {
         executor.setCorePoolSize(coreSize);
         executor.setMaxPoolSize(maxSize);
     }
 
-    /**
-     * Рассчитывает коэффициент использования пула потоков
-     */
     private double calculateUtilizationRate(ThreadPoolStats stats) {
         if (stats.getPoolSize() == 0) {
             return 0.0;
@@ -228,9 +205,6 @@ public class AdaptiveThreadPoolManager {
         return (double) stats.getActiveCount() / stats.getPoolSize();
     }
 
-    /**
-     * Рассчитывает коэффициент заполнения очереди
-     */
     private double calculateQueueUtilizationRate(ThreadPoolStats stats) {
         int queueCapacity;
         if (stats.getQueueSize() == 0) {
@@ -254,9 +228,6 @@ public class AdaptiveThreadPoolManager {
         return 0.0;
     }
 
-    /**
-     * Определяет имя пула потоков по статистике
-     */
     private String getExecutorName(ThreadPoolStats stats) {
         Map<String, ThreadPoolStats> allStats = threadPoolMonitor.getStats();
         for (Map.Entry<String, ThreadPoolStats> entry : allStats.entrySet()) {

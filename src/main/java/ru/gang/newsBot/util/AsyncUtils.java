@@ -31,7 +31,6 @@ public class AsyncUtils {
     @Value("${thread-pool.default-timeout-seconds:30}")
     private int defaultTimeoutSeconds;
 
-    // Явно указываем конструктор с @Qualifier для параметров
     public AsyncUtils(
             @Qualifier("ioTaskExecutor") Executor ioExecutor,
             @Qualifier("cpuTaskExecutor") Executor cpuExecutor,
@@ -41,37 +40,22 @@ public class AsyncUtils {
         this.threadPoolMonitor = threadPoolMonitor;
     }
 
-    /**
-     * Создает асинхронную задачу для IO-операций (сетевые запросы, файловые операции)
-     */
     public <T> CompletableFuture<T> asyncIo(Supplier<T> supplier) {
         return createFuture(supplier, ioExecutor, "IO-операция");
     }
 
-    /**
-     * Создает асинхронную задачу для IO-операций с указанием имени операции
-     */
     public <T> CompletableFuture<T> asyncIo(Supplier<T> supplier, String operationName) {
         return createFuture(supplier, ioExecutor, operationName);
     }
 
-    /**
-     * Создает асинхронную задачу для CPU-интенсивных операций (обработка данных)
-     */
     public <T> CompletableFuture<T> asyncCpu(Supplier<T> supplier) {
         return createFuture(supplier, cpuExecutor, "CPU-операция");
     }
 
-    /**
-     * Создает асинхронную задачу для CPU-интенсивных операций с указанием имени операции
-     */
     public <T> CompletableFuture<T> asyncCpu(Supplier<T> supplier, String operationName) {
         return createFuture(supplier, cpuExecutor, operationName);
     }
 
-    /**
-     * Выполняет асинхронную IO-операцию без результата
-     */
     public CompletableFuture<Void> asyncIoRun(Runnable runnable) {
         return CompletableFuture.runAsync(runnable, ioExecutor)
                 .orTimeout(defaultTimeoutSeconds, TimeUnit.SECONDS)
@@ -81,9 +65,6 @@ public class AsyncUtils {
                 });
     }
 
-    /**
-     * Выполняет асинхронную IO-операцию без результата с указанием имени операции
-     */
     public CompletableFuture<Void> asyncIoRun(Runnable runnable, String operationName) {
         return CompletableFuture.runAsync(runnable, ioExecutor)
                 .orTimeout(defaultTimeoutSeconds, TimeUnit.SECONDS)
@@ -97,9 +78,6 @@ public class AsyncUtils {
                 });
     }
 
-    /**
-     * Выполняет асинхронную CPU-операцию без результата
-     */
     public CompletableFuture<Void> asyncCpuRun(Runnable runnable) {
         return CompletableFuture.runAsync(runnable, cpuExecutor)
                 .orTimeout(defaultTimeoutSeconds, TimeUnit.SECONDS)
@@ -109,9 +87,6 @@ public class AsyncUtils {
                 });
     }
 
-    /**
-     * Выполняет асинхронную CPU-операцию без результата с указанием имени операции
-     */
     public CompletableFuture<Void> asyncCpuRun(Runnable runnable, String operationName) {
         return CompletableFuture.runAsync(runnable, cpuExecutor)
                 .orTimeout(defaultTimeoutSeconds, TimeUnit.SECONDS)
@@ -125,14 +100,10 @@ public class AsyncUtils {
                 });
     }
 
-    /**
-     * Создает асинхронную задачу с обработкой ошибок и таймаутом
-     */
     private <T> CompletableFuture<T> createFuture(Supplier<T> supplier, Executor executor, String operationName) {
         return CompletableFuture.supplyAsync(supplier, executor)
                 .orTimeout(defaultTimeoutSeconds, TimeUnit.SECONDS)
                 .exceptionally(ex -> {
-                    // Проверяем на таймаут
                     if (ex.getCause() instanceof java.util.concurrent.TimeoutException) {
                         log.error("Таймаут при выполнении {}: превышено {} секунд", operationName, defaultTimeoutSeconds);
                     } else {
@@ -142,9 +113,6 @@ public class AsyncUtils {
                 });
     }
 
-    /**
-     * Создает асинхронную задачу с настраиваемым таймаутом
-     */
     public <T> CompletableFuture<T> asyncIoWithTimeout(Supplier<T> supplier, String operationName, long timeout, TimeUnit timeUnit) {
         return CompletableFuture.supplyAsync(supplier, ioExecutor)
                 .orTimeout(timeout, timeUnit)
@@ -159,9 +127,6 @@ public class AsyncUtils {
                 });
     }
 
-    /**
-     * Выполняет все переданные задачи и возвращает список результатов
-     */
     public <T> CompletableFuture<List<T>> allOf(Collection<CompletableFuture<T>> futures) {
         CompletableFuture<Void> allDone = CompletableFuture.allOf(
                 futures.toArray(new CompletableFuture[0])
@@ -174,9 +139,6 @@ public class AsyncUtils {
         );
     }
 
-    /**
-     * Выполняет обработку коллекции элементов асинхронно с использованием IO-пула
-     */
     public <T, R> CompletableFuture<List<R>> processCollectionAsync(
             Collection<T> items,
             Function<T, R> processor) {
@@ -188,9 +150,6 @@ public class AsyncUtils {
         return allOf(futures);
     }
 
-    /**
-     * Выполняет обработку коллекции элементов асинхронно с использованием CPU-пула
-     */
     public <T, R> CompletableFuture<List<R>> processCollectionAsyncCpu(
             Collection<T> items,
             Function<T, R> processor) {
@@ -202,9 +161,6 @@ public class AsyncUtils {
         return allOf(futures);
     }
 
-    /**
-     * Выполняет обработку коллекции элементов асинхронно с пакетной обработкой
-     */
     public <T, R> CompletableFuture<List<R>> processCollectionInBatches(
             Collection<T> items,
             Function<T, R> processor,
@@ -223,9 +179,6 @@ public class AsyncUtils {
         );
     }
 
-    /**
-     * Разбивает список на партиции заданного размера
-     */
     private <T> List<List<T>> partitionList(Collection<T> items, int batchSize) {
         return items.stream()
                 .collect(Collectors.groupingBy(item ->
@@ -235,16 +188,10 @@ public class AsyncUtils {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Выполняет задачу с повторными попытками при ошибке
-     */
     public <T> CompletableFuture<T> withRetry(Supplier<T> task, int maxRetries, long delayMs) {
         return withRetryInternal(task, 0, maxRetries, delayMs, "Retry operation");
     }
 
-    /**
-     * Выполняет задачу с повторными попытками при ошибке с указанием имени операции
-     */
     public <T> CompletableFuture<T> withRetry(Supplier<T> task, int maxRetries, long delayMs, String operationName) {
         return withRetryInternal(task, 0, maxRetries, delayMs, operationName);
     }
@@ -269,7 +216,6 @@ public class AsyncUtils {
                             throw new RuntimeException("Прерывание при ожидании повторной попытки", ie);
                         }
 
-                        // Рекурсивно вызываем следующую попытку
                         return withRetryInternal(task, currentRetry + 1, maxRetries, delayMs, operationName)
                                 .join();
                     } else {
@@ -280,9 +226,6 @@ public class AsyncUtils {
                 });
     }
 
-    /**
-     * Возвращает информацию о состоянии пулов потоков
-     */
     public String getThreadPoolsInfo() {
         StringBuilder info = new StringBuilder("Состояние пулов потоков:\n");
 
@@ -294,9 +237,6 @@ public class AsyncUtils {
         return info.toString();
     }
 
-    /**
-     * Создает future, который выполняется после указанной задержки
-     */
     public <T> CompletableFuture<T> delayedExecution(Supplier<T> task, long delay, TimeUnit timeUnit) {
         CompletableFuture<T> future = new CompletableFuture<>();
 

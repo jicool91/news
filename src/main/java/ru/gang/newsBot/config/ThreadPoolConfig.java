@@ -1,5 +1,6 @@
 package ru.gang.newsBot.config;
 
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,7 +10,6 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -63,10 +63,10 @@ public class ThreadPoolConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
         executor.initialize();
-        
-        log.info("Создан пул потоков для IO-операций: core={}, max={}, queueCapacity={}", 
+
+        log.info("Создан пул потоков для IO-операций: core={}, max={}, queueCapacity={}",
                 ioPoolCoreSize, ioPoolMaxSize, ioPoolQueueCapacity);
-        
+
         threadPoolMonitor().registerPool("ioTaskExecutor", executor);
         return executor;
     }
@@ -76,7 +76,7 @@ public class ThreadPoolConfig {
         int availableProcessors = Runtime.getRuntime().availableProcessors();
         int actualCoreSize = Math.min(availableProcessors, cpuPoolCoreSize);
         int actualMaxSize = Math.min(availableProcessors * 2, cpuPoolMaxSize);
-        
+
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(actualCoreSize);
         executor.setMaxPoolSize(actualMaxSize);
@@ -87,10 +87,10 @@ public class ThreadPoolConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
         executor.initialize();
-        
-        log.info("Создан пул потоков для CPU-операций: core={}, max={}, queueCapacity={}, доступно процессоров: {}", 
+
+        log.info("Создан пул потоков для CPU-операций: core={}, max={}, queueCapacity={}, доступно процессоров: {}",
                 actualCoreSize, actualMaxSize, cpuPoolQueueCapacity, availableProcessors);
-        
+
         threadPoolMonitor().registerPool("cpuTaskExecutor", executor);
         return executor;
     }
@@ -98,22 +98,22 @@ public class ThreadPoolConfig {
     @Bean(name = "schedulerExecutor")
     public ScheduledExecutorService schedulerExecutor() {
         return Executors.newScheduledThreadPool(
-            schedulerPoolSize,
-            createThreadFactory("scheduler-", true)
+                schedulerPoolSize,
+                createThreadFactory("scheduler-", true)
         );
     }
 
     private ThreadFactory createThreadFactory(String namePrefix, boolean daemon) {
         return new ThreadFactory() {
             private final AtomicLong threadCounter = new AtomicLong(0);
-            
+
             @Override
             public Thread newThread(Runnable r) {
                 Thread thread = new Thread(r);
                 thread.setName(namePrefix + threadCounter.incrementAndGet());
                 thread.setDaemon(daemon);
-                thread.setUncaughtExceptionHandler((t, e) -> 
-                    log.error("Необработанное исключение в потоке {}: {}", t.getName(), e.getMessage(), e)
+                thread.setUncaughtExceptionHandler((t, e) ->
+                        log.error("Необработанное исключение в потоке {}: {}", t.getName(), e.getMessage(), e)
                 );
                 return thread;
             }
@@ -125,18 +125,18 @@ public class ThreadPoolConfig {
         return new ThreadPoolMonitor();
     }
 
-    @lombok.Data
+    @Data
     public static class ThreadPoolMonitor {
         private final Map<String, ThreadPoolTaskExecutor> monitoredPools = new ConcurrentHashMap<>();
-        
+
         public void registerPool(String name, ThreadPoolTaskExecutor pool) {
             monitoredPools.put(name, pool);
             log.debug("Зарегистрирован пул потоков для мониторинга: {}", name);
         }
-        
+
         public Map<String, ThreadPoolStats> getStats() {
             Map<String, ThreadPoolStats> stats = new ConcurrentHashMap<>();
-            
+
             monitoredPools.forEach((name, pool) -> {
                 ThreadPoolStats poolStats = new ThreadPoolStats();
                 poolStats.setActiveCount(pool.getActiveCount());
@@ -146,15 +146,15 @@ public class ThreadPoolConfig {
                 poolStats.setQueueSize(pool.getThreadPoolExecutor().getQueue().size());
                 poolStats.setCompletedTaskCount(pool.getThreadPoolExecutor().getCompletedTaskCount());
                 poolStats.setTaskCount(pool.getThreadPoolExecutor().getTaskCount());
-                
+
                 stats.put(name, poolStats);
             });
-            
+
             return stats;
         }
     }
 
-    @lombok.Data
+    @Data
     public static class ThreadPoolStats {
         private int activeCount;
         private int poolSize;

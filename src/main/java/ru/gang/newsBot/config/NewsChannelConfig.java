@@ -12,7 +12,7 @@ import java.util.Map;
 public class NewsChannelConfig {
     private Map<String, String> channels;
 
-    private static final Map<String, String> CATEGORY_TRANSLATIONS = Map.of(
+    public static final Map<String, String> CATEGORY_TRANSLATIONS = Map.of(
             "Бывший СССР", "former_ussr",
             "Россия", "russia",
             "Мир", "world",

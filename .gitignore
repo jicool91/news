@@ -17,6 +17,11 @@ src/main/resources/logback.xml
 /apache-maven-3.9.9
 rss.txt
 sent_news.txt
+jdk-23
+custom-settings.xml
+deps.txt
+last_publication_dates.txt
+.mvn
 # Package Files #
 *.jar
 *.war

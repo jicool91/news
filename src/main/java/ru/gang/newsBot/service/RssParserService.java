@@ -31,25 +31,12 @@ public class RssParserService {
     private final RssConfig rssConfig;
     private final AsyncUtils asyncUtils;
 
-    private static final Map<String, String> categoryTranslation = Map.of(
-            "Бывший СССР", "former_ussr",
-            "Россия", "russia",
-            "Мир", "world",
-            "Экономика", "economy"
-    );
-
     private static final int MAX_IMAGE_RETRY_ATTEMPTS = 5;
-    private static final int IMAGE_RETRY_DELAY_MS = 5000; // 5 секунд между попытками
+    private static final int IMAGE_RETRY_DELAY_MS = 5000;
     private static final Pattern DEFAULT_IMAGE_PATTERN = Pattern.compile(".*/assets/webpack/images/lenta_og\\.[a-f0-9]+\\.png$");
     private static final Pattern VALID_IMAGE_PATTERN = Pattern.compile(".*/images/\\d+/\\d+/\\d+/\\d+/.*\\.jpg$");
 
-    public String getCategoryChannel(String category) {
-        return newsChannelConfig.getChannelByEnglishCategory(category);
-    }
-
-    private final List<String> rssUrls = List.of(
-            "https://lenta.ru/rss/news"
-    );
+    private final List<String> rssUrls = List.of("https://lenta.ru/rss/news");
 
     @Data
     @Builder
@@ -61,9 +48,13 @@ public class RssParserService {
         private String category;
     }
 
+    public String getCategoryChannel(String category) {
+        return newsChannelConfig.getChannelByEnglishCategory(category);
+    }
+
     public Map<String, NewsItem> fetchLatestNewsByCategory() {
         Map<String, NewsItem> categoryNewsMap = new ConcurrentHashMap<>();
-        Set<String> targetCategories = new HashSet<>(categoryTranslation.values());
+        Set<String> targetCategories = new HashSet<>(NewsChannelConfig.CATEGORY_TRANSLATIONS.values());
 
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
@@ -176,12 +167,10 @@ public class RssParserService {
 
         String imageUrl = metaOgImage.attr("content");
 
-        // Проверяем, является ли изображение стандартным (lenta_og.png)
         if (imageUrl != null && !imageUrl.isEmpty()) {
             if (DEFAULT_IMAGE_PATTERN.matcher(imageUrl).matches()) {
                 log.debug("Обнаружено стандартное изображение для {}, попытка: {}", articleUrl, attemptCount + 1);
 
-                // Если используется стандартное изображение, ждем и пробуем снова
                 TimeUnit.MILLISECONDS.sleep(IMAGE_RETRY_DELAY_MS);
                 return extractImageWithRetries(articleUrl, attemptCount + 1);
             } else if (VALID_IMAGE_PATTERN.matcher(imageUrl).matches()) {
@@ -190,13 +179,11 @@ public class RssParserService {
             } else {
                 log.debug("Найдено изображение для {}, но оно не соответствует ожидаемому формату: {}", articleUrl, imageUrl);
 
-                // Если формат URL не соответствует ожидаемому, но это не стандартное изображение,
-                // проверяем еще раз через некоторое время
-                if (attemptCount < 2) {  // Даем еще пару попыток
+                if (attemptCount < 2) {
                     TimeUnit.MILLISECONDS.sleep(IMAGE_RETRY_DELAY_MS);
                     return extractImageWithRetries(articleUrl, attemptCount + 1);
                 }
-                return imageUrl;  // Возвращаем то, что есть
+                return imageUrl;
             }
         }
 
@@ -222,7 +209,10 @@ public class RssParserService {
             String title = item.select("title").text();
             String category = item.select("category").text().trim();
 
-            String normalizedCategory = categoryTranslation.getOrDefault(category, category).toLowerCase();
+            String normalizedCategory = newsChannelConfig.getEnglishCategory(category);
+            if (normalizedCategory == null) {
+                normalizedCategory = category.toLowerCase();
+            }
 
             if (!targetCategories.contains(normalizedCategory)) {
                 log.debug("Пропускаем категорию: {} (нет в списке)", category);
@@ -246,13 +236,11 @@ public class RssParserService {
 
             String imageUrlFromRss = item.select("enclosure[url]").attr("url");
 
-            // Проверяем, является ли изображение из RSS стандартным
             if (!imageUrlFromRss.isEmpty() && DEFAULT_IMAGE_PATTERN.matcher(imageUrlFromRss).matches()) {
                 log.debug("Стандартное изображение в RSS, будем загружать из статьи: {}", imageUrlFromRss);
-                imageUrlFromRss = ""; // Сбрасываем, чтобы загрузить из статьи
+                imageUrlFromRss = "";
             }
 
-            // Создаем базовый объект с информацией, которая уже доступна
             NewsItemBasic basicNewsItem = NewsItemBasic.builder()
                     .title(title)
                     .url(link)
@@ -261,7 +249,6 @@ public class RssParserService {
                     .category(normalizedCategory)
                     .build();
 
-            // Асинхронно получаем дополнительные данные
             CompletableFuture<String> imageFuture = imageUrlFromRss.isEmpty()
                     ? extractImageFromArticleAsync(link)
                     : CompletableFuture.completedFuture(imageUrlFromRss);
@@ -270,18 +257,17 @@ public class RssParserService {
                     ? extractFullDescriptionAsync(link)
                     : CompletableFuture.completedFuture(description);
 
-            // Комбинируем результаты асинхронных задач с использованием utility-класса
             CompletableFuture<NewsItem> newsItemFuture = imageFuture
                     .thenCombineAsync(descriptionFuture, (imageUrl, fullDescription) ->
-                            NewsItem.builder()
-                                    .title(basicNewsItem.getTitle())
-                                    .url(basicNewsItem.getUrl())
-                                    .source(basicNewsItem.getSource())
-                                    .imageUrl(imageUrl)
-                                    .description(fullDescription)
-                                    .category(basicNewsItem.getCategory())
-                                    .build()
-                    , asyncUtils.getCpuExecutor());
+                                    NewsItem.builder()
+                                            .title(basicNewsItem.getTitle())
+                                            .url(basicNewsItem.getUrl())
+                                            .source(basicNewsItem.getSource())
+                                            .imageUrl(imageUrl)
+                                            .description(fullDescription)
+                                            .category(basicNewsItem.getCategory())
+                                            .build()
+                            , asyncUtils.getCpuExecutor());
 
             futureCategoryMap.put(normalizedCategory, newsItemFuture);
 
@@ -291,15 +277,12 @@ public class RssParserService {
             }
         }
 
-        // Ожидаем завершения всех асинхронных задач
         Map<String, NewsItem> result = new HashMap<>();
-        
-        // Используем allOf для ожидания всех задач
+
         List<CompletableFuture<?>> allFutures = new ArrayList<>(futureCategoryMap.values());
         try {
             CompletableFuture.allOf(allFutures.toArray(new CompletableFuture[0])).get();
-            
-            // Когда все задачи завершены, собираем результаты
+
             futureCategoryMap.forEach((category, future) -> {
                 try {
                     NewsItem newsItem = future.getNow(null);

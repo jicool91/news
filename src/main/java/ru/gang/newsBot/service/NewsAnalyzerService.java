@@ -1,15 +1,14 @@
 package ru.gang.newsBot.service;
 
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.util.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NewsAnalyzerService {
-    private static final Logger log = LoggerFactory.getLogger(NewsAnalyzerService.class);
 
     private final List<String> stopWords = List.of("в", "на", "и", "по", "за", "что", "из", "с", "как", "от", "о");
 
@@ -27,7 +26,7 @@ public class NewsAnalyzerService {
         }
 
         Map<String, Integer> result = sortByValue(wordFrequency);
-        log.info("Анализ завершен, найдено {} уникальных слов, выбрано топ {}", 
+        log.info("Анализ завершен, найдено {} уникальных слов, выбрано топ {}",
                 wordFrequency.size(), result.size());
         return result;
     }
